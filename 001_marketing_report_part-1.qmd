@@ -302,7 +302,3 @@ bike_sales_total_revenue_by_category |>
 -   **R&D:** evaluate the `r n_gaps` missing category-frame combinations, starting with `r if (nrow(gaps_in_top_cat) > 0) paste0(gaps_in_top_cat$category.secondary[1], " (", gaps_in_top_cat$frame[1], ")") else paste0(product_gaps$category.secondary[1], " (", product_gaps$frame[1], ")")`, as they sit in categories with proven demand.
 -   **Marketing:** use shop-level transactions and revenue as the starting variables of the segmentation model, given the concentration of revenue in a few shops.
 -   **Limitation:** this report is descriptive. It shows where revenue comes from, but it does not estimate the demand of the missing models, which would require further analysis.
-
-# Ai use disclaimer
-
-Artificial intelligence tools were used in the preparation of this report: **Claude (Anthropic)**. It was used to help structure the report, draft and refine the English text, and write and debug the R code. The group reviewed, ran and verified all the code and results, and takes full responsibility for the final content.
