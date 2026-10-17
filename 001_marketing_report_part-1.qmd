@@ -1,0 +1,315 @@
+---
+title: "Marketing report part 1"
+subtitle: "Bike sales: data description to support R&D and Marketing"
+date: today
+author:
+  - Student Name 1
+  - Student Name 2
+  - Student Name 3
+format:
+  html:
+    toc: true
+    code-fold: true
+    number-sections: true
+    embed-resources: true
+editor: source
+---
+
+```{r}
+#| label: libraries
+#| echo: false
+#| message: false
+#| warning: false
+
+library(tidyverse)
+library(sweep)
+library(skimr)
+library(scales)
+```
+
+```{r}
+#| label: key-figures
+#| echo: false
+
+# Hidden chunk: computes the figures quoted in the text, so that every number
+# in the report is generated directly from the data (no hard-coded values).
+
+bike_sales <- bike_sales
+
+n_rows        <- nrow(bike_sales)
+n_shops       <- n_distinct(bike_sales$bikeshop.name)
+n_categories  <- n_distinct(bike_sales$category.secondary)
+n_frames      <- n_distinct(bike_sales$frame)
+n_possible    <- n_categories * n_frames
+
+combos_offered <- bike_sales |> count(category.secondary, frame)
+n_offered      <- nrow(combos_offered)
+n_gaps         <- n_possible - n_offered
+
+product_gaps <- expand_grid(
+  category.secondary = unique(bike_sales$category.secondary),
+  frame              = unique(bike_sales$frame)
+) |>
+  anti_join(combos_offered, by = c("category.secondary", "frame")) |>
+  arrange(category.secondary, frame)
+
+revenue_by_category <- bike_sales |>
+  group_by(category.secondary) |>
+  summarise(total_revenue = sum(price.ext), .groups = "drop") |>
+  arrange(desc(total_revenue))
+
+revenue_by_frame <- bike_sales |>
+  group_by(frame) |>
+  summarise(total_revenue = sum(price.ext), .groups = "drop") |>
+  arrange(desc(total_revenue))
+
+revenue_by_shop <- bike_sales |>
+  group_by(bikeshop.name) |>
+  summarise(total_revenue = sum(price.ext), .groups = "drop") |>
+  arrange(desc(total_revenue))
+
+total_revenue <- sum(bike_sales$price.ext)
+
+top_cat   <- as.character(revenue_by_category$category.secondary[1])
+top_cat_s <- revenue_by_category$total_revenue[1] / total_revenue
+top3_cat  <- paste(revenue_by_category$category.secondary[1:3], collapse = ", ")
+top_frame <- as.character(revenue_by_frame$frame[1])
+top_frame_s <- revenue_by_frame$total_revenue[1] / total_revenue
+top_shop  <- as.character(revenue_by_shop$bikeshop.name[1])
+top3_shop <- paste(revenue_by_shop$bikeshop.name[1:3], collapse = ", ")
+top3_shop_s <- sum(revenue_by_shop$total_revenue[1:3]) / total_revenue
+
+median_by_cat <- bike_sales |>
+  group_by(category.secondary) |>
+  summarise(med = median(price.ext), .groups = "drop") |>
+  arrange(desc(med))
+median_by_frame <- bike_sales |>
+  group_by(frame) |>
+  summarise(med = median(price.ext), .groups = "drop") |>
+  arrange(desc(med))
+
+# Gaps that fall in the highest-revenue categories / frame materials
+gaps_in_top_cat <- product_gaps |>
+  filter(category.secondary %in% revenue_by_category$category.secondary[1:3])
+```
+
+# Describing data
+
+## Introduction
+
+This executive report describes the `bike_sales` data set (`r comma(n_rows)` order lines, `r n_shops` bicycle shops and `r dollar(total_revenue)` in total revenue) to support two internal clients: the **Research and Development (R&D)** division, which needs to identify potential new products, and the **Marketing** team, which will build a customer segmentation model in the next stage.
+
+The main findings are:
+
+-   **Product gaps (R&D).** The catalogue crosses `r n_categories` bicycle categories with `r n_frames` frame materials (`r n_possible` possible models), but only `r n_offered` combinations are sold. This leaves **`r n_gaps` unexplored models**: `r paste0(product_gaps$category.secondary, " (", product_gaps$frame, ")", collapse = "; ")`.
+-   **Revenue by category.** *`r top_cat`* is the largest category (`r percent(top_cat_s, 0.1)` of revenue); the top three are `r top3_cat`.
+-   **Revenue by frame.** *`r top_frame`* frames generate `r percent(top_frame_s, 0.1)` of total revenue.
+-   **Customers (Marketing).** Revenue is concentrated: the three best shops (`r top3_shop`) account for `r percent(top3_shop_s, 0.1)` of revenue, which makes shop-level segmentation worthwhile.
+
+## Import data
+
+The data come from the `bike_sales` data set of the `sweep` package. Each row is one order line (a product ordered by a bicycle shop) with information on the product (model, category, frame material), the shop (name, city, state) and the transaction (date, quantity, unit price and extended price, `price.ext`, which we use as *revenue*).
+
+```{r}
+# Import the data from the sweep package
+bike_sales <- bike_sales
+```
+
+## Inspect data
+
+The data set has `r comma(n_rows)` rows and `r ncol(bike_sales)` variables. The structure below shows the type of each variable: dates (`order.date`), numeric variables (`quantity`, `price`, `price.ext`) and categorical variables describing the product (`category.primary`, `category.secondary`, `frame`) and the customer (`bikeshop.name`, `bikeshop.city`, `bikeshop.state`).
+
+```{r}
+glimpse(bike_sales)
+```
+
+## Summarize data
+
+The summary statistics and the counts below give a first picture of the business and show where the catalogue is incomplete.
+
+### Summary statistics
+
+```{r}
+skim(bike_sales)
+```
+
+The data contain `r sum(is.na(bike_sales))` missing values, so no imputation is needed. The typical order line has a quantity of `r median(bike_sales$quantity)` unit(s) (median) and a unit price of `r dollar(median(bike_sales$price))` (median), while the mean unit price is `r dollar(mean(bike_sales$price))`. The gap between the mean and the median is a sign of a right-skewed price distribution, explored in the histograms below.
+
+### Counting
+
+First, the bicycle categories and the frame materials sold by the corporation:
+
+```{r}
+bike_sales |>
+  count(category.secondary, sort = TRUE)
+```
+
+```{r}
+bike_sales |>
+  count(frame, sort = TRUE)
+```
+
+There are `r n_categories` categories and `r n_frames` frame materials, i.e. $`r n_categories` \times `r n_frames` = `r n_possible`$ possible models. Counting the combinations actually sold:
+
+```{r}
+bike_sales |>
+  count(category.secondary, frame)
+```
+
+Only `r n_offered` combinations are available, so **`r n_gaps` models are not offered** and can be explored by R&D (product gap analysis). These are the missing combinations:
+
+```{r}
+product_gaps
+```
+
+```{r}
+#| label: fig-gaps
+#| fig-cap: "Orders by category and frame material. Empty cells are product gaps."
+#| fig-height: 4.5
+
+bike_sales |>
+  count(category.secondary, frame) |>
+  complete(category.secondary, frame) |>
+  ggplot(aes(x = frame, y = fct_rev(category.secondary), fill = n)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = n), na.rm = TRUE) +
+  scale_fill_gradient(low = "#cfe3f5", high = "#1f5f99", na.value = "grey90") +
+  labs(x = "Frame material", y = NULL, fill = "Order lines")
+```
+
+`r if (nrow(gaps_in_top_cat) > 0) paste0("Of these gaps, ", nrow(gaps_in_top_cat), " fall in the three highest-revenue categories (", top3_cat, "): ", paste0(gaps_in_top_cat$category.secondary, " (", gaps_in_top_cat$frame, ")", collapse = "; "), ". These are the most promising candidates because the corporation already has proven demand in those categories.") else "None of the gaps fall in the three highest-revenue categories, so the gaps are in smaller segments of the business."`
+
+For Marketing, the first step toward the segmentation model is to know the bicycle shops and their number of transactions (order lines):
+
+```{r}
+bike_sales |>
+  count(bikeshop.name, sort = TRUE)
+```
+
+The `r n_shops` shops place between `r min(count(bike_sales, bikeshop.name)$n)` and `r max(count(bike_sales, bikeshop.name)$n)` order lines each, so activity differs considerably across customers.
+
+## Data visualization
+
+### Histograms
+
+#### Quantity behavior
+
+```{r}
+#| label: fig-quantity
+#| fig-cap: "Distribution of quantity per order line"
+
+bike_sales |>
+  ggplot(aes(x = quantity)) +
+  geom_histogram(binwidth = 1, fill = "#1f5f99", colour = "white") +
+  labs(x = "Quantity per order line", y = "Order lines")
+```
+
+Quantities per order line range from `r min(bike_sales$quantity)` to `r max(bike_sales$quantity)` units, with a median of `r median(bike_sales$quantity)`. Most orders are small, so revenue is driven more by the number of orders and by price than by large unit volumes.
+
+#### Price behavior
+
+```{r}
+#| label: fig-price
+#| fig-cap: "Distribution of unit price"
+
+bike_sales |>
+  ggplot(aes(x = price)) +
+  geom_histogram(bins = 30, fill = "#1f5f99", colour = "white") +
+  scale_x_continuous(labels = dollar) +
+  labs(x = "Unit price", y = "Order lines")
+```
+
+Unit prices range from `r dollar(min(bike_sales$price))` to `r dollar(max(bike_sales$price))`, with a median of `r dollar(median(bike_sales$price))`. The price distribution shows that the catalogue mixes lower-priced models with a smaller group of premium bikes.
+
+### Boxplots
+
+```{r}
+#| label: fig-box-category
+#| fig-cap: "Revenue per order line by bicycle category"
+
+bike_sales |>
+  mutate(category.secondary = fct_reorder(category.secondary, price.ext, .fun = median)) |>
+  ggplot(aes(x = price.ext, y = category.secondary)) +
+  geom_boxplot(fill = "#cfe3f5") +
+  scale_x_continuous(labels = dollar) +
+  labs(x = "Revenue per order line (price.ext)", y = NULL)
+```
+
+By category, *`r as.character(median_by_cat$category.secondary[1])`* has the highest median revenue per order line (`r dollar(median_by_cat$med[1])`) and *`r as.character(median_by_cat$category.secondary[nrow(median_by_cat)])`* the lowest (`r dollar(median_by_cat$med[nrow(median_by_cat)])`). The boxes also show different dispersion across categories, and the points beyond the whiskers are unusually large order lines.
+
+```{r}
+#| label: fig-box-frame
+#| fig-cap: "Revenue per order line by frame material"
+
+bike_sales |>
+  ggplot(aes(x = frame, y = price.ext)) +
+  geom_boxplot(fill = "#cfe3f5") +
+  scale_y_continuous(labels = dollar) +
+  labs(x = "Frame material", y = "Revenue per order line (price.ext)")
+```
+
+By frame material, *`r as.character(median_by_frame$frame[1])`* has the higher median revenue per order line (`r dollar(median_by_frame$med[1])` versus `r dollar(median_by_frame$med[2])` for *`r as.character(median_by_frame$frame[2])`*).
+
+## Questions answered with data
+
+### Which bike shops generate more revenue?
+
+```{r}
+#| label: fig-shops
+#| fig-cap: "Total revenue by bicycle shop"
+#| fig-height: 6
+
+# Prepare data
+bike_sales_total_revenue_by_shop <- bike_sales |>
+  group_by(bikeshop.name) |>
+  summarise(total_revenue = sum(price.ext)) |>
+  mutate(bikeshop.name = fct_reorder(.f = bikeshop.name, .x = total_revenue))
+
+# Visualize data
+bike_sales_total_revenue_by_shop |>
+  ggplot(aes(x = total_revenue, y = bikeshop.name)) +
+  geom_col(fill = "#1f5f99") +
+  scale_x_continuous(labels = dollar) +
+  labs(x = "Total revenue", y = NULL)
+```
+
+*`r top_shop`* is the top customer (`r dollar(revenue_by_shop$total_revenue[1])`), followed by `r revenue_by_shop$bikeshop.name[2]` and `r revenue_by_shop$bikeshop.name[3]`. Together, the top three shops represent `r percent(top3_shop_s, 0.1)` of revenue. These shops should be prioritised in the customer segmentation.
+
+### Which bicycle categories generate more revenue?
+
+```{r}
+#| label: fig-categories
+#| fig-cap: "Total revenue by bicycle category"
+
+# Prepare data
+bike_sales_total_revenue_by_category <- bike_sales |>
+  group_by(category.secondary) |>
+  summarise(total_revenue = sum(price.ext)) |>
+  mutate(category.secondary = fct_reorder(.f = category.secondary, .x = total_revenue))
+
+# Visualize data
+bike_sales_total_revenue_by_category |>
+  ggplot(aes(x = total_revenue, y = category.secondary)) +
+  geom_col(fill = "#1f5f99") +
+  scale_x_continuous(labels = dollar) +
+  labs(x = "Total revenue", y = NULL)
+```
+
+*`r top_cat`* generates the most revenue (`r dollar(revenue_by_category$total_revenue[1])`, `r percent(top_cat_s, 0.1)` of the total), followed by `r revenue_by_category$category.secondary[2]` and `r revenue_by_category$category.secondary[3]`. Product development efforts around these categories are the most likely to pay off.
+
+## Conclusions and recommendations
+
+-   **R&D:** evaluate the `r n_gaps` missing category-frame combinations, starting with `r if (nrow(gaps_in_top_cat) > 0) paste0(gaps_in_top_cat$category.secondary[1], " (", gaps_in_top_cat$frame[1], ")") else paste0(product_gaps$category.secondary[1], " (", product_gaps$frame[1], ")")`, as they sit in categories with proven demand.
+-   **Marketing:** use shop-level transactions and revenue as the starting variables of the segmentation model, given the concentration of revenue in a few shops.
+-   **Limitation:** this report is descriptive. It shows where revenue comes from, but it does not estimate the demand of the missing models, which would require further analysis.
+
+# Ai use disclaimer
+
+Artificial intelligence tools were used in the preparation of this report: **Claude (Anthropic)**. It was used to help structure the report, draft and refine the English text, and write and debug the R code. The group reviewed, ran and verified all the code and results, and takes full responsibility for the final content.
+
+Authorized uses (unchecked uses do not apply):
+
+- [x] Assistance in text writing
+- [ ] Assistance in image creation
+- [x] Assistance in developing ideas and exploring arguments
+- [x] Assistance with computer programming
