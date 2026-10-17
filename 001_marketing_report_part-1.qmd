@@ -3,9 +3,9 @@ title: "Marketing report part 1"
 subtitle: "Bike sales: data description to support R&D and Marketing"
 date: today
 author:
-  - Student Name 1
-  - Student Name 2
-  - Student Name 3
+  - Diego Velasco
+  - Erika Valencia
+  - Julieth Soto
 format:
   html:
     toc: true
