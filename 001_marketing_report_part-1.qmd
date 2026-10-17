@@ -306,10 +306,3 @@ bike_sales_total_revenue_by_category |>
 # Ai use disclaimer
 
 Artificial intelligence tools were used in the preparation of this report: **Claude (Anthropic)**. It was used to help structure the report, draft and refine the English text, and write and debug the R code. The group reviewed, ran and verified all the code and results, and takes full responsibility for the final content.
-
-Authorized uses (unchecked uses do not apply):
-
-- [x] Assistance in text writing
-- [ ] Assistance in image creation
-- [x] Assistance in developing ideas and exploring arguments
-- [x] Assistance with computer programming
